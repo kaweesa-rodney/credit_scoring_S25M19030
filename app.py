@@ -19,22 +19,20 @@ from sklearn.metrics import (
 # App config
 # -------------------------------------------------
 st.set_page_config(
-    page_title="Credit Scoring & Fairness Dashboard",
+    page_title="Fairness-Aware Credit Scoring",
     layout="wide"
 )
 
 st.title("Fairness-Aware Credit Scoring System")
 
 st.markdown("""
-This dashboard demonstrates:
-- Credit risk prediction
-- Fairness auditing & mitigation
-- Explainability (SHAP)
-- In-app risk scoring
-- Downloadable audit reports
+This application demonstrates an end-to-end **credit scoring system**
+with **fairness auditing, mitigation, explainability, and applicant-level scoring**.
 """)
 
+# -------------------------------------------------
 # Load data
+# -------------------------------------------------
 @st.cache_data
 def load_data():
     columns = [
@@ -49,7 +47,7 @@ def load_data():
 
     df["credit_risk"] = df["credit_risk"].apply(lambda x: 1 if x == 2 else 0)
     df["gender"] = df["personal_status_sex"].apply(
-        lambda x: "male" if x in ["A91", "A93", "A94"] else "female"
+        lambda x: "male" if x in ["A91","A93","A94"] else "female"
     )
     df["age_group"] = df["age"].apply(lambda x: "young" if x < 25 else "adult")
 
@@ -57,18 +55,17 @@ def load_data():
 
 df = load_data()
 
-
+# -------------------------------------------------
 # Sidebar – decision policy
+# -------------------------------------------------
 st.sidebar.header("Decision Policy")
 
 base_threshold = st.sidebar.slider(
-    "Base Approval Threshold",
-    0.30, 0.60, 0.40, 0.01
+    "Base Approval Threshold", 0.30, 0.60, 0.40, 0.01
 )
 
 young_threshold = st.sidebar.slider(
-    "Young Applicant Threshold",
-    0.30, 0.60, 0.45, 0.01
+    "Young Applicant Threshold", 0.30, 0.60, 0.45, 0.01
 )
 
 # -------------------------------------------------
@@ -102,113 +99,180 @@ model.fit(X_train, y_train)
 y_prob = model.predict_proba(X_test)[:, 1]
 
 # -------------------------------------------------
-# Model performance
+# Tabs
 # -------------------------------------------------
-st.header("Model Performance")
-
-col1, col2, col3, col4 = st.columns(4)
-
-col1.metric("Accuracy", round(accuracy_score(y_test, model.predict(X_test)), 3))
-col2.metric("ROC-AUC", round(roc_auc_score(y_test, y_prob), 3))
-col3.metric(
-    "Precision",
-    round(precision_score((y_test == 0), y_prob < base_threshold), 3)
-)
-col4.metric(
-    "Recall",
-    round(recall_score((y_test == 0), y_prob < base_threshold), 3)
-)
+tab1, tab2, tab3, tab4 = st.tabs([
+    "Credit Risk Prediction",
+    "Fairness Auditing & Mitigation",
+    "Explainability (SHAP)",
+    "In-App Risk Scoring"
+])
 
 
-# Fairness analysis
-st.header("Fairness Analysis")
+# PREDICTION
 
-results = sens_test.copy()
-results["approved"] = (y_prob < base_threshold).astype(int)
-results["actual"] = y_test.values
+with tab1:
+    st.subheader("Model Performance")
 
-results["approved_adjusted"] = np.where(
-    (results["age_group"] == "young") & (y_prob < young_threshold),
-    1,
-    results["approved"]
-)
+    col1, col2, col3, col4 = st.columns(4)
 
-di_gender = (
-    results.groupby("gender")["approved_adjusted"].mean()["female"] /
-    results.groupby("gender")["approved_adjusted"].mean()["male"]
-)
-
-di_age = (
-    results.groupby("age_group")["approved_adjusted"].mean()["young"] /
-    results.groupby("age_group")["approved_adjusted"].mean()["adult"]
-)
-
-st.write("**Disparate Impact (Gender):**", round(di_gender, 3))
-st.write("**Disparate Impact (Age):**", round(di_age, 3))
+    col1.metric("Accuracy", round(accuracy_score(y_test, model.predict(X_test)), 3))
+    col2.metric("ROC-AUC", round(roc_auc_score(y_test, y_prob), 3))
+    col3.metric(
+        "Precision",
+        round(precision_score((y_test == 0), y_prob < base_threshold), 3)
+    )
+    col4.metric(
+        "Recall",
+        round(recall_score((y_test == 0), y_prob < base_threshold), 3)
+    )
 
 
+# FAIRNESS
+with tab2:
+    st.subheader("Fairness Metrics")
+
+    results = sens_test.copy()
+    results["approved"] = (y_prob < base_threshold).astype(int)
+    results["actual"] = y_test.values
+
+    results["approved_adjusted"] = np.where(
+        (results["age_group"] == "young") & (y_prob < young_threshold),
+        1,
+        results["approved"]
+    )
+
+    di_gender = (
+        results.groupby("gender")["approved_adjusted"].mean()["female"] /
+        results.groupby("gender")["approved_adjusted"].mean()["male"]
+    )
+
+    di_age = (
+        results.groupby("age_group")["approved_adjusted"].mean()["young"] /
+        results.groupby("age_group")["approved_adjusted"].mean()["adult"]
+    )
+
+    st.write("**Disparate Impact (Gender):**", round(di_gender, 3))
+    st.write("**Disparate Impact (Age):**", round(di_age, 3))
+
+    st.markdown("""
+    **80% Rule**
+    - DI ≥ 0.80 indicates acceptable fairness
+    - Age-based predict pob. threshold improves age fairness, this is what we adjust
+    """)
 
 
-# risk scoring
-st.header("Applicant-Level Credit Scoring")
+# EXPLAINABILITY (SHAP)
+with tab3:
+    st.subheader("🔍 SHAP Explainability")
 
-with st.form("applicant_form"):
-    applicant = {}
-    for col in X.columns:
-        if col in cat_cols:
-            applicant[col] = st.selectbox(col, sorted(df[col].unique()))
-        else:
-            applicant[col] = st.number_input(
-                col, float(df[col].min()), float(df[col].max())
-            )
+    st.markdown("""
+    This section explains **why** the model makes its predictions.
+    - Positive SHAP values increase default risk
+    - Negative SHAP values reduce default risk
+    """)
 
-    submitted = st.form_submit_button("Score Applicant")
+    # -------------------------------------------------
+    # Prepare transformed data
+    # -------------------------------------------------
+    X_train_transformed = model.named_steps["prep"].transform(X_train)
+    X_test_transformed  = model.named_steps["prep"].transform(X_test)
 
-if submitted:
-    applicant_df = pd.DataFrame([applicant])
+    feature_names = model.named_steps["prep"].get_feature_names_out()
 
-    prob = model.predict_proba(applicant_df)[0, 1]
+    # -------------------------------------------------
+    # SHAP explainer
+    # -------------------------------------------------
+    explainer = shap.LinearExplainer(
+        model.named_steps["clf"],
+        X_train_transformed
+    )
 
-    age_group = "young" if applicant["age"] < 25 else "adult"
-    threshold = young_threshold if age_group == "young" else base_threshold
+    shap_values = explainer.shap_values(X_test_transformed)
 
-    decision = "APPROVED" if prob < threshold else "REJECTED"
+    # -------------------------------------------------
+    # SHAP summary plot (with wording)
+    # -------------------------------------------------
+    fig, ax = plt.subplots()
+    plt.title(
+        "SHAP Summary Plot: Feature Impact on Loan Default Risk\n"
+        "Positive values increase default risk; negative values reduce risk",
+        fontsize=11
+    )
 
-    st.success(f"Predicted Default Probability: {round(prob, 3)}")
-    st.info(f"Decision Threshold Used: {threshold}")
-    st.warning(f"Final Decision: {decision}")
+    shap.summary_plot(
+        shap_values,
+        X_test_transformed,
+        feature_names=feature_names,
+        show=False
+    )
+
+    st.pyplot(fig)
+
+    # -------------------------------------------------
+    # SHAP importance table
+    # -------------------------------------------------
+    shap_importance = pd.DataFrame({
+        "Feature": feature_names,
+        "Mean |SHAP Value|": np.abs(shap_values).mean(axis=0)
+    }).sort_values(by="Mean |SHAP Value|", ascending=False)
+
+    interpretation_map = {
+        "num__credit_amount": "Higher loan amounts increase default risk",
+        "num__duration": "Longer loan durations increase default risk",
+        "num__age": "Older applicants tend to have lower default risk",
+        "cat__employment_A75": "Stable employment reduces default risk",
+        "cat__savings_A65": "Higher savings reduce default risk"
+    }
+
+    shap_importance["Interpretation"] = shap_importance["Feature"].map(
+        interpretation_map
+    )
+
+    st.subheader("Top SHAP Feature Contributions")
+    st.dataframe(
+        shap_importance.head(10),
+        use_container_width=True
+    )
+
+    # -------------------------------------------------
+    # Human-readable explanation summary
+    # -------------------------------------------------
+    st.subheader("Summary")
+
+    for _, row in shap_importance.head(20).iterrows():
+        if pd.notna(row["Interpretation"]):
+            st.markdown(f"- **{row['Interpretation']}**")
 
 
+#IN-APP RISK SCORING
+with tab4:
+    st.subheader("Credit Scoring")
 
-# SHAP explainability
-st.header("🔍 Model Explainability (SHAP)")
+    with st.form("applicant_form"):
+        applicant = {}
+        for col in X.columns:
+            if col in cat_cols:
+                applicant[col] = st.selectbox(col, sorted(df[col].unique()))
+            else:
+                applicant[col] = st.number_input(
+                    col,
+                    float(df[col].min()),
+                    float(df[col].max())
+                )
 
-X_train_t = model.named_steps["prep"].transform(X_train)
-X_test_t = model.named_steps["prep"].transform(X_test)
-feature_names = model.named_steps["prep"].get_feature_names_out()
+        submitted = st.form_submit_button("Score Applicant")
 
-explainer = shap.LinearExplainer(model.named_steps["clf"], X_train_t)
-shap_values = explainer.shap_values(X_test_t)
+    if submitted:
+        applicant_df = pd.DataFrame([applicant])
 
-fig, ax = plt.subplots()
-shap.summary_plot(
-    shap_values,
-    X_test_t,
-    feature_names=feature_names,
-    show=False
-)
-st.pyplot(fig)
+        prob = model.predict_proba(applicant_df)[0, 1]
 
+        age_group = "young" if applicant["age"] < 25 else "adult"
+        threshold = young_threshold if age_group == "young" else base_threshold
 
-# Error analysis
-st.header("Error Analysis")
+        decision = "APPROVED" if prob < threshold else "REJECTED"
 
-errors = X_test.copy()
-errors["actual"] = y_test
-errors["pred"] = (y_prob < base_threshold).astype(int)
-
-fp = len(errors[(errors["actual"] == 1) & (errors["pred"] == 0)])
-fn = len(errors[(errors["actual"] == 0) & (errors["pred"] == 1)])
-
-st.write(f"**False Positives:** {fp} → Potential financial loss")
-st.write(f"**False Negatives:** {fn} → Missed revenue opportunities")
+        st.success(f"Predicted Default Probability: {round(prob, 3)}")
+        st.info(f"Threshold Applied: {threshold}")
+        st.warning(f"Final Decision: {decision}")
