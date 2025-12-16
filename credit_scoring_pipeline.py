@@ -43,6 +43,16 @@ X = df.drop(columns=["credit_risk", "gender", "age_group"])
 y = df["credit_risk"]
 sensitive = df[["gender", "age_group"]]
 
+cat_cols = X.select_dtypes(include="object").columns
+num_cols = X.select_dtypes(exclude="object").columns
+
+preprocessor = ColumnTransformer(
+    transformers=[
+        ("num", StandardScaler(), num_cols),
+        ("cat", OneHotEncoder(handle_unknown="ignore"), cat_cols)
+    ]
+)
+
 X_train, X_test, y_train, y_test, sens_train, sens_test = train_test_split(
     X, y, sensitive,
     test_size=0.3,
@@ -52,30 +62,15 @@ X_train, X_test, y_train, y_test, sens_train, sens_test = train_test_split(
 
 
 #model pipeline
-pipeline = Pipeline(steps=[
-    ("prep", ColumnTransformer([
-        ("num", StandardScaler(), X.select_dtypes(exclude="object").columns),
-        ("cat", OneHotEncoder(handle_unknown="ignore"),
-         X.select_dtypes(include="object").columns)
-    ])),
-    ("clf", LogisticRegression(class_weight="balanced", solver="liblinear"))
+model = Pipeline(steps=[
+    ("prep", preprocessor),
+    ("clf", LogisticRegression(
+        class_weight="balanced",
+        solver="liblinear"
+    ))
 ])
 
-
-#hyperparameter tuning
-param_grid = {
-    "clf__C": [0.01, 0.1, 1, 10]
-}
-
-grid = GridSearchCV(
-    pipeline,
-    param_grid,
-    scoring="roc_auc",
-    cv=5
-)
-
-grid.fit(X_train, y_train)
-model = grid.best_estimator_
+model.fit(X_train, y_train)
 
 #model evaluation
 y_pred = model.predict(X_test)
@@ -102,6 +97,7 @@ di_gender = (
     results.groupby("gender")["approved"].mean()["male"]
 )
 
+#default DI gender at 0.4 probability threshold
 print(f"\nDisparate Impact(Gender): {di_gender}")
 
 di_age = (
@@ -109,8 +105,11 @@ di_age = (
     results.groupby("age_group")["approved"].mean()["adult"]
 )
 
+#default DI age at 0.4 probability threshold
 print(f"\nDisparate Impact(Age): {di_age}")
 
+
+#adjusting probability threshold for age group
 results["approved_adjusted"] = np.where(
     (results["age_group"] == "young") & (y_prob < 0.45),
     1,
@@ -137,7 +136,7 @@ approval_by_age = (
 print(f"\n{approval_by_age}")
 
 
-#Approval rate by age group (adjusted
+#Approval rate by age group after adjusting probability threshold
 approval_adj_age = (
     results.groupby("age_group")["approved_adjusted"]
     .mean()
@@ -166,6 +165,7 @@ approval_comparison = pd.DataFrame({
 })
 
 print(f"\n{approval_comparison}")
+
 
 
 
