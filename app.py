@@ -28,6 +28,7 @@ st.title("Fairness-Aware Credit Scoring System")
 st.markdown("""
 This dashboard demonstrates:
 - Credit risk prediction
+- Fairness auditing & mitigation
 
 """)
 
@@ -115,3 +116,30 @@ col4.metric(
     "Recall",
     round(recall_score((y_test == 0), y_prob < base_threshold), 3)
 )
+
+
+# Fairness analysis
+st.header("Fairness Analysis")
+
+results = sens_test.copy()
+results["approved"] = (y_prob < base_threshold).astype(int)
+results["actual"] = y_test.values
+
+results["approved_adjusted"] = np.where(
+    (results["age_group"] == "young") & (y_prob < young_threshold),
+    1,
+    results["approved"]
+)
+
+di_gender = (
+    results.groupby("gender")["approved_adjusted"].mean()["female"] /
+    results.groupby("gender")["approved_adjusted"].mean()["male"]
+)
+
+di_age = (
+    results.groupby("age_group")["approved_adjusted"].mean()["young"] /
+    results.groupby("age_group")["approved_adjusted"].mean()["adult"]
+)
+
+st.write("**Disparate Impact (Gender):**", round(di_gender, 3))
+st.write("**Disparate Impact (Age):**", round(di_age, 3))
