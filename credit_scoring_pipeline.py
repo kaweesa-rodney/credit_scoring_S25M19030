@@ -167,5 +167,70 @@ approval_comparison = pd.DataFrame({
 print(f"\n{approval_comparison}")
 
 
+#model explanation(shap)
+X_train_transformed = model.named_steps["prep"].transform(X_train)
+X_test_transformed  = model.named_steps["prep"].transform(X_test)
+
+feature_names = model.named_steps["prep"].get_feature_names_out()
+
+
+explainer = shap.LinearExplainer(
+    model.named_steps["clf"],
+    X_train_transformed
+)
+
+shap_values = explainer.shap_values(X_test_transformed)
+
+
+# Summary Plot with wording
+plt.title(
+    "SHAP Summary Plot: Feature Impact on Loan Default Risk\n"
+    "Positive values increase default risk; negative values reduce risk",
+    fontsize=11
+)
+
+shap.summary_plot(
+    shap_values,
+    X_test_transformed,
+    feature_names=feature_names,
+    show=False
+)
+
+#plt.show()
+
+
+#SHAP importance
+shap_importance = pd.DataFrame({
+    "Feature": feature_names,
+    "Mean |SHAP Value|": np.abs(shap_values).mean(axis=0)
+}).sort_values(by="Mean |SHAP Value|", ascending=False)
+
+# interpretations
+interpretation_map = {
+    "num__credit_amount": "Higher loan amounts increase default risk",
+    "num__duration": "Longer loan durations increase default risk",
+    "num__age": "Older applicants tend to have lower default risk",
+    "cat__employment_A75": "Stable employment reduces default risk",
+    "cat__savings_A65": "Higher savings reduce default risk"
+}
+
+shap_importance["Interpretation"] = shap_importance["Feature"].map(
+    interpretation_map
+)
+
+print("\nTop SHAP Feature Contributions:")
+print(shap_importance.head(10))
+
+
+# explanation of output
+print("\nModel Explanation Summary:")
+for _, row in shap_importance.head(20).iterrows():
+    explanation = row["Interpretation"]
+    if pd.notna(explanation):
+        print(f"- {explanation}")
+
+
+
+
 
 
