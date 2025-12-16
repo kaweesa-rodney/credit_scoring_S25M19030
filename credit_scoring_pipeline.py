@@ -192,6 +192,30 @@ print("Precision:", precision_score(y_actual_good, results["approved_adjusted"])
 print("Recall   :", recall_score(y_actual_good, results["approved_adjusted"]))
 print("F1 Score :", f1_score(y_actual_good, results["approved_adjusted"]))
 
+#saving models and fairness/decision policy
+import joblib
+import os
+
+# create directory if it doesn't exist
+os.makedirs("saved_models", exist_ok=True)
+
+# save model
+joblib.dump(model, "saved_models/credit_scoring_model.pkl")
+
+print("Model saved successfully.")
+
+#decision policy
+decision_policy = {
+    "base_threshold": 0.4,
+    "young_threshold": 0.45,
+    "description": "Age-aware threshold adjustment for fairness"
+}
+
+joblib.dump(decision_policy, "saved_models/decision_policy.pkl")
+
+print("Decision policy saved successfully.")
+
+
 
 #model explanation(shap)
 print("\n---------------------SHAP Explainability------------------------")
@@ -271,7 +295,7 @@ false_negatives = errors[(errors["actual"] == 0) & (errors["pred"] == 1)]
 print("\n================ ERROR ANALYSIS =================")
 
 print(f"False Positives: {len(false_positives)}")
-print("Interpretation: Applicants predicted as low-risk but who actually defaulted.")
+print("Interpretation: Applicants predicted as low risk but actually defaulted.")
 print("Business impact: Potential financial loss due to loan defaults.\n")
 
 print(f"False Negatives: {len(false_negatives)}")
