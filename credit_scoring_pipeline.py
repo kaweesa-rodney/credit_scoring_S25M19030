@@ -1,12 +1,18 @@
 import pandas as pd
 import numpy as np
-
 from sklearn.model_selection import train_test_split, GridSearchCV, cross_val_score
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, roc_auc_score, f1_score, confusion_matrix
+from sklearn.metrics import (
+    accuracy_score,
+    precision_score,
+    recall_score,
+    f1_score,
+    confusion_matrix
+)
 
 import shap
 import matplotlib.pyplot as plt
@@ -70,6 +76,7 @@ model = Pipeline(steps=[
     ))
 ])
 
+print("\n----------Model Training and Prediction--------------")
 model.fit(X_train, y_train)
 
 #model evaluation
@@ -88,9 +95,11 @@ print("CV AUC:", cv_auc.mean())
 
 
 #fairness
+print("\n-------------------------Model Fairness----------------------------------")
 results = sens_test.copy()
 results["approved"] = (y_prob < 0.4).astype(int)
 results["actual"] = y_test.values
+
 
 di_gender = (
     results.groupby("gender")["approved"].mean()["female"] /
@@ -166,8 +175,26 @@ approval_comparison = pd.DataFrame({
 
 print(f"\n{approval_comparison}")
 
+y_actual_good = (y_test == 0).astype(int)
+
+print("\n================ PERFORMANCE (Before Mitigation) ================")
+
+print("Accuracy :", accuracy_score(y_actual_good, results["approved"]))
+print("Precision:", precision_score(y_actual_good, results["approved"]))
+print("Recall   :", recall_score(y_actual_good, results["approved"]))
+print("F1 Score :", f1_score(y_actual_good, results["approved"]))
+
+
+print("\n================ PERFORMANCE (After Mitigation) =================")
+
+print("Accuracy :", accuracy_score(y_actual_good, results["approved_adjusted"]))
+print("Precision:", precision_score(y_actual_good, results["approved_adjusted"]))
+print("Recall   :", recall_score(y_actual_good, results["approved_adjusted"]))
+print("F1 Score :", f1_score(y_actual_good, results["approved_adjusted"]))
+
 
 #model explanation(shap)
+print("\n---------------------SHAP Explainability------------------------")
 X_train_transformed = model.named_steps["prep"].transform(X_train)
 X_test_transformed  = model.named_steps["prep"].transform(X_test)
 
@@ -232,5 +259,22 @@ for _, row in shap_importance.head(20).iterrows():
 
 
 
+#Error Analysis
+print("\n--------------------Error Analysis---------------")
+errors = X_test.copy()
+errors["actual"] = y_test
+errors["pred"] = y_pred
 
+false_positives = errors[(errors["actual"] == 1) & (errors["pred"] == 0)]
+false_negatives = errors[(errors["actual"] == 0) & (errors["pred"] == 1)]
+
+print("\n================ ERROR ANALYSIS =================")
+
+print(f"False Positives: {len(false_positives)}")
+print("Interpretation: Applicants predicted as low-risk but who actually defaulted.")
+print("Business impact: Potential financial loss due to loan defaults.\n")
+
+print(f"False Negatives: {len(false_negatives)}")
+print("Interpretation: Creditworthy applicants incorrectly rejected.")
+print("Business impact: Missed revenue and potential customer dissatisfaction.")
 
