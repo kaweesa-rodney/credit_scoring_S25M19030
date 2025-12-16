@@ -143,3 +143,35 @@ di_age = (
 
 st.write("**Disparate Impact (Gender):**", round(di_gender, 3))
 st.write("**Disparate Impact (Age):**", round(di_age, 3))
+
+
+
+
+# risk scoring
+st.header("Applicant-Level Credit Scoring")
+
+with st.form("applicant_form"):
+    applicant = {}
+    for col in X.columns:
+        if col in cat_cols:
+            applicant[col] = st.selectbox(col, sorted(df[col].unique()))
+        else:
+            applicant[col] = st.number_input(
+                col, float(df[col].min()), float(df[col].max())
+            )
+
+    submitted = st.form_submit_button("Score Applicant")
+
+if submitted:
+    applicant_df = pd.DataFrame([applicant])
+
+    prob = model.predict_proba(applicant_df)[0, 1]
+
+    age_group = "young" if applicant["age"] < 25 else "adult"
+    threshold = young_threshold if age_group == "young" else base_threshold
+
+    decision = "APPROVED" if prob < threshold else "REJECTED"
+
+    st.success(f"Predicted Default Probability: {round(prob, 3)}")
+    st.info(f"Decision Threshold Used: {threshold}")
+    st.warning(f"Final Decision: {decision}")
