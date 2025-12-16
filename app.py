@@ -29,7 +29,9 @@ st.markdown("""
 This dashboard demonstrates:
 - Credit risk prediction
 - Fairness auditing & mitigation
-
+- Explainability (SHAP)
+- In-app risk scoring
+- Downloadable audit reports
 """)
 
 # Load data
@@ -175,3 +177,38 @@ if submitted:
     st.success(f"Predicted Default Probability: {round(prob, 3)}")
     st.info(f"Decision Threshold Used: {threshold}")
     st.warning(f"Final Decision: {decision}")
+
+
+
+# SHAP explainability
+st.header("🔍 Model Explainability (SHAP)")
+
+X_train_t = model.named_steps["prep"].transform(X_train)
+X_test_t = model.named_steps["prep"].transform(X_test)
+feature_names = model.named_steps["prep"].get_feature_names_out()
+
+explainer = shap.LinearExplainer(model.named_steps["clf"], X_train_t)
+shap_values = explainer.shap_values(X_test_t)
+
+fig, ax = plt.subplots()
+shap.summary_plot(
+    shap_values,
+    X_test_t,
+    feature_names=feature_names,
+    show=False
+)
+st.pyplot(fig)
+
+
+# Error analysis
+st.header("Error Analysis")
+
+errors = X_test.copy()
+errors["actual"] = y_test
+errors["pred"] = (y_prob < base_threshold).astype(int)
+
+fp = len(errors[(errors["actual"] == 1) & (errors["pred"] == 0)])
+fn = len(errors[(errors["actual"] == 0) & (errors["pred"] == 1)])
+
+st.write(f"**False Positives:** {fp} → Potential financial loss")
+st.write(f"**False Negatives:** {fn} → Missed revenue opportunities")
