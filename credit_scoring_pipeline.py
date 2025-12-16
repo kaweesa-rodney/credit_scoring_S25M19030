@@ -91,3 +91,81 @@ cv_auc = cross_val_score(
 )
 print("CV AUC:", cv_auc.mean())
 
+
+#fairness
+results = sens_test.copy()
+results["approved"] = (y_prob < 0.4).astype(int)
+results["actual"] = y_test.values
+
+di_gender = (
+    results.groupby("gender")["approved"].mean()["female"] /
+    results.groupby("gender")["approved"].mean()["male"]
+)
+
+print(f"\nDisparate Impact(Gender): {di_gender}")
+
+di_age = (
+    results.groupby("age_group")["approved"].mean()["young"] /
+    results.groupby("age_group")["approved"].mean()["adult"]
+)
+
+print(f"\nDisparate Impact(Age): {di_age}")
+
+results["approved_adjusted"] = np.where(
+    (results["age_group"] == "young") & (y_prob < 0.45),
+    1,
+    results["approved"]
+)
+
+approval_by_gender = (
+    results.groupby("gender")["approved"]
+    .mean()
+    .reset_index()
+    .rename(columns={"approved": "approval_rate"})
+)
+
+print(f"\n{approval_by_gender}")
+
+
+approval_by_age = (
+    results.groupby("age_group")["approved"]
+    .mean()
+    .reset_index()
+    .rename(columns={"approved": "approval_rate"})
+)
+
+print(f"\n{approval_by_age}")
+
+
+#Approval rate by age group (adjusted
+approval_adj_age = (
+    results.groupby("age_group")["approved_adjusted"]
+    .mean()
+)
+
+print(f"\n{approval_adj_age}")
+
+#DI after adjusted threshold
+di_age_adjusted = (
+    approval_adj_age["young"] /
+    approval_adj_age["adult"]
+)
+
+print(f"\n{di_age_adjusted}")
+
+approval_comparison = pd.DataFrame({
+    "Age Group": ["Adult", "Young"],
+    "Approval Rate (Before)": [
+        results.groupby("age_group")["approved"].mean()["adult"],
+        results.groupby("age_group")["approved"].mean()["young"]
+    ],
+    "Approval Rate (After)": [
+        approval_adj_age["adult"],
+        approval_adj_age["young"]
+    ]
+})
+
+print(f"\n{approval_comparison}")
+
+
+
