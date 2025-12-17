@@ -44,6 +44,8 @@ df["gender"] = df["personal_status_sex"].apply(
 
 df["age_group"] = df["age"].apply(lambda x: "young" if x < 25 else "adult")
 
+df.to_csv("data/Kaweesa.csv", index=False)
+
 #train test split
 X = df.drop(columns=["credit_risk", "gender", "age_group"])
 y = df["credit_risk"]
